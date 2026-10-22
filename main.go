@@ -117,7 +117,9 @@ func main() {
 
 	// Add all commands
 	if err = modules.AddCommands(container,
+		commands.Link,
 		commands.Online,
+		commands.Operator,
 		commands.Ping,
 		commands.RPC,
 		commands.Whitelist,
