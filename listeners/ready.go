@@ -7,8 +7,8 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/state"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/state"
 )
 
 var Ready = core.NewListener(func(container *core.Container[state.Public], event *events.Ready) error {
@@ -20,7 +20,7 @@ var Ready = core.NewListener(func(container *core.Container[state.Public], event
 	}
 	_, err := container.Client.Rest.SetGlobalCommands(event.User.ID, commands)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to register global commands: %w", err)
 	}
 	return nil
 })

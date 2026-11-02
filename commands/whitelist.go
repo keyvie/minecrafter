@@ -6,17 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/omit"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/database"
-	"github.com/keyvie/minecraft-bot/internal/database/models"
-	"github.com/keyvie/minecraft-bot/internal/mojang"
-	"github.com/keyvie/minecraft-bot/internal/state"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/database/models"
+	"github.com/keyvie/minecrafter/internal/mojang"
+	"github.com/keyvie/minecrafter/internal/state"
 )
 
 var Whitelist = core.NewApplicationCommand(
@@ -64,6 +62,7 @@ var Whitelist = core.NewApplicationCommand(
 		},
 	},
 	func(
+		ctx context.Context,
 		c *core.Container[state.Public],
 		event *events.ApplicationCommandInteractionCreate,
 	) error {
@@ -75,26 +74,26 @@ var Whitelist = core.NewApplicationCommand(
 			user := data.User("user")
 
 			// Get the UUID
-			profile, err := c.State.Mojang.Profiles.GetByUsername(context.Background(), username)
+			profile, err := c.State.Mojang.Profiles.GetByUsername(ctx, username)
 			if err != nil {
 				return err
 			}
 			uuid := mojang.FormatUUID(profile.ID)
 
 			// Check if someone already owns that minecraft account?
-			result, err := c.State.Repos.Accounts.FindOne(context.Background(), database.QueryFindOneOptions{
-				Where: map[string]any{
-					"uuid": uuid,
-				},
-			})
+			exists, err := c.State.Postgres.
+				NewSelect().
+				Table(models.AccountTable).
+				Where("uuid = ?", uuid).
+				Exists(ctx)
 			if err != nil {
 				return err
 			}
-			if result.Found {
+			if exists {
 				return fmt.Errorf("An account with that username has already been linked")
 			}
 
-			_, err = c.State.RPC.Call(context.Background(), "minecraft:allowlist/add", map[string]any{
+			_, err = c.State.RPC.Call(ctx, "minecraft:allowlist/add", map[string]any{
 				"add": []map[string]any{
 					{
 						"name": username,
@@ -107,11 +106,14 @@ var Whitelist = core.NewApplicationCommand(
 			}
 
 			// Add it to the database
-			_, err = c.State.Repos.Accounts.Create(context.Background(), models.Account{
-				UUID:      uuid,
-				DiscordID: user.ID.String(),
-				CreatedAt: time.Now().UTC(),
-			})
+			account := models.Account{
+				UUID:   uuid,
+				UserID: user.ID.String(),
+			}
+			_, err = c.State.Postgres.
+				NewInsert().
+				Model(&account).
+				Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -127,26 +129,26 @@ var Whitelist = core.NewApplicationCommand(
 
 			if username != "" {
 				// Get the UUID
-				profile, err := c.State.Mojang.Profiles.GetByUsername(context.Background(), username)
+				profile, err := c.State.Mojang.Profiles.GetByUsername(ctx, username)
 				if err != nil {
 					return err
 				}
 				uuid := mojang.FormatUUID(profile.ID)
 
 				// Check if the account exists in the database
-				result, err := c.State.Repos.Accounts.FindOne(context.Background(), database.QueryFindOneOptions{
-					Where: map[string]any{
-						"uuid": uuid,
-					},
-				})
+				exists, err := c.State.Postgres.
+					NewSelect().
+					Table(models.AccountTable).
+					Where("uuid = ?", uuid).
+					Exists(ctx)
 				if err != nil {
 					return err
 				}
-				if !result.Found {
+				if !exists {
 					return fmt.Errorf("No account with that username is linked")
 				}
 
-				_, err = c.State.RPC.Call(context.Background(), "minecraft:allowlist/remove", map[string]any{
+				_, err = c.State.RPC.Call(ctx, "minecraft:allowlist/remove", map[string]any{
 					"remove": []map[string]any{
 						{
 							"name": username,
@@ -159,11 +161,12 @@ var Whitelist = core.NewApplicationCommand(
 				}
 
 				// Remove it from the database
-				_, err = c.State.Repos.Accounts.Delete(context.Background(), database.QueryDeleteOptions{
-					Where: map[string]any{
-						"uuid": uuid,
-					},
-				})
+				_, err = c.State.Postgres.
+					NewDelete().
+					Table(models.AccountTable).
+					Where("user_id = ?", user.ID).
+					Exec(ctx)
+
 				if err != nil {
 					return err
 				}
@@ -176,32 +179,29 @@ var Whitelist = core.NewApplicationCommand(
 
 			if user.ID != 0 {
 				// Lookup in database
-				result, err := c.State.Repos.Accounts.Find(context.Background(), database.QueryFindOptions{
-					Where: map[string]any{
-						"discord_id": user.ID.String(),
-					},
-				})
-				if err != nil {
+				var accounts []models.Account
+				if err := c.State.Postgres.
+					NewSelect().
+					Model(&accounts).
+					Where("user_id = ?", user.ID).
+					Scan(ctx); err != nil {
 					return err
-				}
-				if result.Total <= 0 {
-					return fmt.Errorf("No account is linked to that Discord user")
 				}
 
 				successful := []string{}
 				failed := []string{}
-				for _, item := range result.Items {
+				for _, item := range accounts {
 					uuid := item.UUID
 
 					// Get Minecraft username
-					profile, err := c.State.Mojang.Profiles.GetByUUID(context.Background(), uuid)
+					profile, err := c.State.Mojang.Profiles.GetByUUID(ctx, uuid)
 					if err != nil {
 						failed = append(failed, uuid)
 						continue
 					}
 					username := profile.Name
 
-					_, err = c.State.RPC.Call(context.Background(), "minecraft:allowlist/remove", map[string]any{
+					_, err = c.State.RPC.Call(ctx, "minecraft:allowlist/remove", map[string]any{
 						"remove": []map[string]any{
 							{
 								"name": username,
@@ -214,11 +214,11 @@ var Whitelist = core.NewApplicationCommand(
 						continue
 					}
 
-					_, err = c.State.Repos.Accounts.Delete(context.Background(), database.QueryDeleteOptions{
-						Where: map[string]any{
-							"uuid": uuid,
-						},
-					})
+					_, err = c.State.Postgres.
+						NewDelete().
+						Table(models.AccountTable).
+						Where("uuid = ?", uuid).
+						Exec(ctx)
 					if err != nil {
 						failed = append(failed, username)
 						continue
@@ -251,7 +251,7 @@ var Whitelist = core.NewApplicationCommand(
 			return fmt.Errorf("You need to select a user or username")
 
 		case "list":
-			resp, err := c.State.RPC.Call(context.Background(), "minecraft:allowlist")
+			resp, err := c.State.RPC.Call(ctx, "minecraft:allowlist")
 			if err != nil {
 				return err
 			}

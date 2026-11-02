@@ -1,1 +1,1 @@
-# minecraft-bot
+# minecrafter

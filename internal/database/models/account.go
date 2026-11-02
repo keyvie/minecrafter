@@ -1,9 +1,17 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/uptrace/bun"
+)
+
+const AccountTable = "accounts"
 
 type Account struct {
-	UUID      string    `db:"uuid" json:"uuid"`
-	DiscordID string    `db:"discord_id" json:"discord_id"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	bun.BaseModel `bun:"table:accounts"`
+
+	UUID      string    `bun:"uuid,pk"`
+	UserID    string    `bun:"user_id"`
+	CreatedAt time.Time `bun:"created_at"`
 }

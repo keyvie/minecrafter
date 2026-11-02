@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"log/slog"
 	"reflect"
+	"time"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -18,7 +20,9 @@ func AddHandlers[S any](container *Container[S]) {
 				Type: e.ApplicationCommandInteraction.Data.Type(),
 			}
 			if applicationCommand, exists := container.ApplicationCommands[key]; exists {
-				if err := applicationCommand.Execute(container, e); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err := applicationCommand.Execute(ctx, container, e); err != nil {
 					message := discord.MessageCreate{
 						Content: "Error: " + err.Error(),
 						Flags:   discord.MessageFlagEphemeral,

@@ -10,9 +10,9 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/omit"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/rpc"
-	"github.com/keyvie/minecraft-bot/internal/state"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/rpc"
+	"github.com/keyvie/minecrafter/internal/state"
 )
 
 var RPC = core.NewApplicationCommand(
@@ -34,6 +34,7 @@ var RPC = core.NewApplicationCommand(
 		},
 	},
 	func(
+		ctx context.Context,
 		c *core.Container[state.Public],
 		event *events.ApplicationCommandInteractionCreate,
 	) error {
@@ -50,9 +51,9 @@ var RPC = core.NewApplicationCommand(
 		var resp rpc.Response
 		var err error
 		if params != nil {
-			resp, err = c.State.RPC.Call(context.Background(), method, params)
+			resp, err = c.State.RPC.Call(ctx, method, params)
 		} else {
-			resp, err = c.State.RPC.Call(context.Background(), method)
+			resp, err = c.State.RPC.Call(ctx, method)
 		}
 		if err != nil {
 			return err

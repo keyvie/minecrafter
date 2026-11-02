@@ -10,9 +10,9 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/omit"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/mojang"
-	"github.com/keyvie/minecraft-bot/internal/state"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/mojang"
+	"github.com/keyvie/minecrafter/internal/state"
 )
 
 var Operator = core.NewApplicationCommand(
@@ -60,6 +60,7 @@ var Operator = core.NewApplicationCommand(
 		},
 	},
 	func(
+		ctx context.Context,
 		c *core.Container[state.Public],
 		event *events.ApplicationCommandInteractionCreate,
 	) error {
@@ -78,13 +79,13 @@ var Operator = core.NewApplicationCommand(
 			}
 
 			// Get the UUID
-			profile, err := c.State.Mojang.Profiles.GetByUsername(context.Background(), username)
+			profile, err := c.State.Mojang.Profiles.GetByUsername(ctx, username)
 			if err != nil {
 				return err
 			}
 			uuid := mojang.FormatUUID(profile.ID)
 
-			_, err = c.State.RPC.Call(context.Background(), "minecraft:operators/add", map[string]any{
+			_, err = c.State.RPC.Call(ctx, "minecraft:operators/add", map[string]any{
 				"add": []map[string]any{
 					{
 						"permissionLevel":     level,
@@ -109,13 +110,13 @@ var Operator = core.NewApplicationCommand(
 			username := data.String("username")
 
 			// Get the UUID
-			profile, err := c.State.Mojang.Profiles.GetByUsername(context.Background(), username)
+			profile, err := c.State.Mojang.Profiles.GetByUsername(ctx, username)
 			if err != nil {
 				return err
 			}
 			uuid := mojang.FormatUUID(profile.ID)
 
-			_, err = c.State.RPC.Call(context.Background(), "minecraft:operators/remove", map[string]any{
+			_, err = c.State.RPC.Call(ctx, "minecraft:operators/remove", map[string]any{
 				"remove": []map[string]any{
 					{
 						"name": username,
@@ -133,7 +134,7 @@ var Operator = core.NewApplicationCommand(
 			})
 
 		case "list":
-			resp, err := c.State.RPC.Call(context.Background(), "minecraft:operators")
+			resp, err := c.State.RPC.Call(ctx, "minecraft:operators")
 			if err != nil {
 				return err
 			}

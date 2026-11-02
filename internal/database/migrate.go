@@ -2,40 +2,44 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
+	"log/slog"
 
-	"github.com/pressly/goose/v3"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/migrate"
+
+	"github.com/keyvie/minecrafter/internal/database/migrations"
 )
 
-func Migrate(ctx context.Context, db *sql.DB, args []string) error {
-
-	if err := goose.SetDialect("postgres"); err != nil {
-		return err
+func Migrate(ctx context.Context, postgres *bun.DB, args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: %s <up|create> [name]", args[0])
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	migrationsDir := filepath.Join(dir, "internal", "database", "migrations")
-
-	if len(args) == 0 {
-		return fmt.Errorf("%s <up|create> [name]", args[0])
-	}
+	migrator := migrate.NewMigrator(postgres, migrations.Migrations)
 
 	switch args[1] {
 	case "up":
-		return goose.Up(db, migrationsDir)
+		if err := migrator.Init(ctx); err != nil {
+			return err
+		}
+
+		_, err := migrator.Migrate(ctx)
+		if err != nil {
+			return err
+		}
+		slog.Info("Migrate: Successful")
+		return nil
+
 	case "create":
 		if len(args) < 3 {
 			return fmt.Errorf("usage: %s create <name>", args[0])
 		}
 
-		return goose.Create(db, migrationsDir, args[2], "sql")
-	}
+		_, err := migrator.CreateSQLMigrations(ctx, args[2])
+		return err
 
-	return fmt.Errorf("'%s' is not a valid command", args[1])
+	default:
+		return fmt.Errorf("'%s' is not a valid command", args[1])
+	}
 }

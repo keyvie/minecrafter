@@ -3,7 +3,7 @@ package modules
 import (
 	"fmt"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
+	"github.com/keyvie/minecrafter/internal/core"
 )
 
 func AddCommand[S any](container *core.Container[S], command *core.ApplicationCommand[S]) error {

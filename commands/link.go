@@ -3,17 +3,15 @@ package commands
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/omit"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/database"
-	"github.com/keyvie/minecraft-bot/internal/database/models"
-	"github.com/keyvie/minecraft-bot/internal/mojang"
-	"github.com/keyvie/minecraft-bot/internal/state"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/database/models"
+	"github.com/keyvie/minecrafter/internal/mojang"
+	"github.com/keyvie/minecrafter/internal/state"
 )
 
 var Link = core.NewApplicationCommand(
@@ -30,6 +28,7 @@ var Link = core.NewApplicationCommand(
 		},
 	},
 	func(
+		ctx context.Context,
 		c *core.Container[state.Public],
 		event *events.ApplicationCommandInteractionCreate,
 	) error {
@@ -44,15 +43,15 @@ var Link = core.NewApplicationCommand(
 		uuid := mojang.FormatUUID(profile.ID)
 
 		// Check if someone already owns that minecraft account?
-		result, err := c.State.Repos.Accounts.FindOne(context.Background(), database.QueryFindOneOptions{
-			Where: map[string]any{
-				"uuid": uuid,
-			},
-		})
+		exists, err := c.State.Postgres.
+			NewSelect().
+			Table("accounts").
+			Where("uuid = ?", uuid).
+			Exists(ctx)
 		if err != nil {
 			return err
 		}
-		if result.Found {
+		if exists {
 			return fmt.Errorf("An account with that username has already been linked")
 		}
 
@@ -69,11 +68,14 @@ var Link = core.NewApplicationCommand(
 		}
 
 		// Add it to the database
-		_, err = c.State.Repos.Accounts.Create(context.Background(), models.Account{
-			UUID:      uuid,
-			DiscordID: event.User().ID.String(),
-			CreatedAt: time.Now().UTC(),
-		})
+		account := models.Account{
+			UUID:   uuid,
+			UserID: event.User().ID.String(),
+		}
+		_, err = c.State.Postgres.
+			NewInsert().
+			Model(&account).
+			Exec(ctx)
 		if err != nil {
 			return err
 		}

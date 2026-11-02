@@ -3,7 +3,7 @@ package modules
 import (
 	"fmt"
 
-	"github.com/keyvie/minecraft-bot/internal/core"
+	"github.com/keyvie/minecrafter/internal/core"
 )
 
 func AddListener[S any](container *core.Container[S], listener *core.Listener[S]) error {

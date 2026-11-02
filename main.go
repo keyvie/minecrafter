@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"log/slog"
 	"os"
@@ -14,19 +15,20 @@ import (
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/gateway"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
 
-	"github.com/keyvie/minecraft-bot/commands"
-	"github.com/keyvie/minecraft-bot/internal/core"
-	"github.com/keyvie/minecraft-bot/internal/database"
-	"github.com/keyvie/minecraft-bot/internal/database/models"
-	"github.com/keyvie/minecraft-bot/internal/modules"
-	"github.com/keyvie/minecraft-bot/internal/mojang"
-	"github.com/keyvie/minecraft-bot/internal/rpc"
-	"github.com/keyvie/minecraft-bot/internal/state"
-	"github.com/keyvie/minecraft-bot/listeners"
+	"github.com/keyvie/minecrafter/commands"
+	"github.com/keyvie/minecrafter/internal/core"
+	"github.com/keyvie/minecrafter/internal/database"
+	"github.com/keyvie/minecrafter/internal/modules"
+	"github.com/keyvie/minecrafter/internal/mojang"
+	"github.com/keyvie/minecrafter/internal/rpc"
+	"github.com/keyvie/minecrafter/internal/state"
+	"github.com/keyvie/minecrafter/internal/validator"
+	"github.com/keyvie/minecrafter/listeners"
 )
 
 func main() {
@@ -51,11 +53,9 @@ func main() {
 		panic("POSTGRES_URL is not set")
 	}
 
-	pool, err := pgxpool.New(ctx, postgresUrl)
-	if err != nil {
-		panic(err)
-	}
-	if err := pool.Ping(ctx); err != nil {
+	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(postgresUrl)))
+	postgres := bun.NewDB(sqldb, pgdialect.New())
+	if err := postgres.Ping(); err != nil {
 		panic(err)
 	}
 
@@ -66,17 +66,13 @@ func main() {
 		if builtInMigrate == "true" {
 			args = []string{"migrate", "up"}
 		}
-		db := stdlib.OpenDBFromPool(pool)
-		if err := database.Migrate(ctx, db, args); err != nil {
+		if err := database.Migrate(ctx, postgres, args); err != nil {
 			slog.Error("Migrate", "error", err.Error())
 		}
-		if builtInMigrate != "true" {
+		if os.Args[1] == "migrate" {
 			return
 		}
 	}
-
-	// Create all the repos
-	accountsRepo := database.NewRepository[models.Account](pool, "accounts")
 
 	// Open the discord client
 	discordClient, err := disgo.New(os.Getenv("DISCORD_TOKEN"),
@@ -104,9 +100,9 @@ func main() {
 		panic(err)
 	}
 
-	state := state.New(rpcClient, mojangClient, state.Repos{
-		Accounts: accountsRepo,
-	})
+	v := validator.New()
+
+	state := state.New(postgres, rpcClient, mojangClient, v)
 	container := core.NewContainer(discordClient, core.WithState(*state))
 	core.AddHandlers(container)
 
@@ -122,6 +118,7 @@ func main() {
 		commands.Operator,
 		commands.Ping,
 		commands.RPC,
+		commands.Settings,
 		commands.Whitelist,
 	); err != nil {
 		panic(err)
@@ -146,5 +143,7 @@ func main() {
 		slog.Error("RPC", "Error closing", err)
 	}
 
-	pool.Close()
+	if err := postgres.Close(); err != nil {
+		slog.Error("PostgreSQL", "Error closing", err)
+	}
 }

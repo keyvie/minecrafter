@@ -1,26 +1,25 @@
 package state
 
 import (
-	"github.com/keyvie/minecraft-bot/internal/database"
-	"github.com/keyvie/minecraft-bot/internal/database/models"
-	"github.com/keyvie/minecraft-bot/internal/mojang"
-	"github.com/keyvie/minecraft-bot/internal/rpc"
+	"github.com/uptrace/bun"
+
+	"github.com/keyvie/minecrafter/internal/mojang"
+	"github.com/keyvie/minecrafter/internal/rpc"
+	"github.com/keyvie/minecrafter/internal/validator"
 )
 
-type Repos struct {
-	Accounts *database.Repository[models.Account]
-}
-
 type Public struct {
-	RPC    *rpc.Client
-	Mojang *mojang.Client
-	Repos  Repos
+	Postgres  *bun.DB
+	RPC       *rpc.Client
+	Mojang    *mojang.Client
+	Validator *validator.Validator
 }
 
-func New(rpc *rpc.Client, m *mojang.Client, repos Repos) *Public {
+func New(postgres *bun.DB, rpc *rpc.Client, mojang *mojang.Client, v *validator.Validator) *Public {
 	return &Public{
-		RPC:    rpc,
-		Repos:  repos,
-		Mojang: m,
+		Postgres:  postgres,
+		RPC:       rpc,
+		Mojang:    mojang,
+		Validator: v,
 	}
 }
